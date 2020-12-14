@@ -22,16 +22,11 @@ class OneWayList: public List<T> {
  protected:
     // the first item
     std::unique_ptr<ListItem<T>> head_;
-    // the last item
-    ListItem<T>* last_;
-    // function to compare two data
-    std::function<bool(const T&, const T&)> is_equal_;
 
  public:
     // Constructor
     explicit OneWayList(std::function<bool(const T&, const T&)> is_equal) :
-        last_(nullptr),
-        is_equal_(is_equal) {
+            List<T>(is_equal) {
     }
 
     bool is_empty() override {
@@ -48,14 +43,17 @@ class OneWayList: public List<T> {
     void push(T data) override {
         if (!head_) {  // empty ?
             head_ = std::make_unique<ListItem<T>>(std::move(data));
-            last_ = head_.get();
         } else {
             auto new_item = std::make_unique<ListItem<T>>(std::move(data));
-            // add the new item after the current last item
-            ListItem<T>* prev = last_;
-            last_ = new_item.get();
-            last_->prev_ = prev;
-            prev->next_ = std::move(new_item);
+            // add the new item after the last item
+            ListItem<T>* last = head_.get();
+            while (last) {
+                if (last->next_)
+                    last = last->next_.get();
+                else
+                    break;
+            }
+            last->next_ = std::move(new_item);
         }
     }
 
@@ -71,16 +69,10 @@ class OneWayList: public List<T> {
             if (pos == index) {
                 if (pos == 0) {
                     head_ = std::move(cur->next_);
-                    if (head_)
-                        head_->prev_ = nullptr;
-                    else
-                        last_ = nullptr;
                 } else {
                     if (cur->next_) {
-                        cur->next_->prev_ = prev;
                         prev->next_ = std::move(cur->next_);
                     } else {
-                        last_ = prev;
                         prev->next_ = nullptr;
                     }
                 }
@@ -100,12 +92,8 @@ class OneWayList: public List<T> {
         ListItem<T>* cur = head_.get();
         // process head
         while (cur) {
-            if (is_equal_(cur->data_, data)) {
+            if (List<T>::is_equal_(cur->data_, data)) {
                 head_ = std::move(cur->next_);
-                if (head_)
-                    head_->prev_ = nullptr;
-                else
-                    last_ = nullptr;
                 cur = head_.get();
             } else {
                 prev = cur;
@@ -115,13 +103,11 @@ class OneWayList: public List<T> {
         }
         // process all other items
         while (cur) {
-            if (is_equal_(cur->data_, data)) {
+            if (List<T>::is_equal_(cur->data_, data)) {
                 if (cur->next_) {
-                    cur->next_->prev_ = prev;
                     prev->next_ = std::move(cur->next_);
                     cur = prev->next_.get();
                 } else {
-                    last_ = prev;
                     prev->next_ = nullptr;
                     cur = nullptr;
                 }
@@ -134,28 +120,11 @@ class OneWayList: public List<T> {
 
     // Find all item with the specified data - return the number of such items
     int find(const T& data) override {
-        int count = 0;
-        if (!head_)
-            return count;
-        // go through all items from the first
-        ListItem<T>* cur = head_.get();
-        while (cur) {
-            if (is_equal_(cur->data_, data))
-                count++;
-            cur = cur->next_.get();
-        }
-        return count;
+        return List<T>::template find<ListItem<T>>(data, head_);
     }
 
     // Apply the specified function to all item
     void apply(std::function<void(const T&)> callback) override {
-        if (!head_)
-            return;
-        // go through all items from the first
-        ListItem<T>* cur = head_.get();
-        while (cur) {
-            callback(cur->data_);
-            cur = cur->next_.get();
-        }
+        List<T>::template apply<ListItem<T>>(callback, head_);
     }
 };
